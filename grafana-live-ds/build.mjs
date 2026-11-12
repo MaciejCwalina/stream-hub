@@ -10,8 +10,11 @@ const options = {
   target: "es2022",
   sourcemap: true,
   logLevel: "info",
-  // Provided by Grafana at runtime; never bundle them.
-  external: ["react", "react-dom", "@grafana/data", "@grafana/runtime", "@grafana/ui"],
+  // Resolved by Grafana at runtime via its SystemJS shared-dependency map
+  // (public/app/features/plugins/loader/sharedDependencies.ts).
+  // Do NOT bundle these: @grafana/data contains the byte strings "PanelCtrl"/
+  // "ConfigCtrl", which Grafana 13's Angular detector would flag and reject.
+  external: ["react", "react-dom", "rxjs", "@grafana/data", "@grafana/runtime", "@grafana/ui"],
 };
 
 if (watch) {

@@ -43,4 +43,5 @@ Style checks (blank-line-after-block rule + gofumpt): `./tools/lint.sh` from the
 - The Grafana plugins dir must be owned by the container user (uid 472 in the home server's compose setup).
 - Replace the plugin binary only while Grafana is stopped (text-file-busy).
 - The plugin's health check translates `ws://` → `http://` when calling the hub's `/healthz`.
-- The frontend bundle must be ESM (`format: "esm"` in build.mjs). An IIFE/CJS bundle makes the browser fail with "Could not load plugin" even though the backend works.
+- The frontend bundle must be ESM (`format: "esm"` in build.mjs) with `react`, `rxjs` and `@grafana/*` kept **external** — Grafana resolves them at runtime via its SystemJS shared-dependency map.
+- Do **not** bundle `@grafana/data` (or friends): it contains the byte strings `PanelCtrl`/`ConfigCtrl`, which Grafana 13's Angular detector flags — the plugin is then refused with "angular plugins are not supported" / "Could not load plugin".
