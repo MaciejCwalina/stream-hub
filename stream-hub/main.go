@@ -52,14 +52,14 @@ type MetricHub struct {
 	history          []entry            // rolling sample history (capped), used for connect snapshots
 	pendingBroadcast []entry            // samples waiting to be flushed to subscribers
 
-	subsMu sync.Mutex
-	subs   map[*subscriber]struct{}
+	subscribersMutex sync.Mutex
+	subscribers      map[*subscriber]struct{}
 }
 
 func NewMetricHub() *MetricHub {
 	return &MetricHub{
-		lastValues: map[string]float64{},
-		subs:       map[*subscriber]struct{}{},
+		lastValues:  map[string]float64{},
+		subscribers: map[*subscriber]struct{}{},
 	}
 }
 
@@ -94,8 +94,8 @@ func (h *MetricHub) Broadcaster(ctx context.Context, interval time.Duration) {
 				continue
 			}
 
-			h.subsMu.Lock()
-			for sub := range h.subs {
+			h.subscribersMutex.Lock()
+			for sub := range h.subscribers {
 				filtered := batch
 				if len(sub.prefixes) > 0 {
 					filtered = nil
@@ -116,24 +116,24 @@ func (h *MetricHub) Broadcaster(ctx context.Context, interval time.Duration) {
 				}
 			}
 
-			h.subsMu.Unlock()
+			h.subscribersMutex.Unlock()
 		}
 	}
 }
 
 func (h *MetricHub) subscribe(prefixes []string) *subscriber {
 	sub := &subscriber{ch: make(chan []entry, 16), prefixes: prefixes}
-	h.subsMu.Lock()
-	h.subs[sub] = struct{}{}
-	h.subsMu.Unlock()
+	h.subscribersMutex.Lock()
+	h.subscribers[sub] = struct{}{}
+	h.subscribersMutex.Unlock()
 	return sub
 }
 
 func (h *MetricHub) unsubscribe(sub *subscriber) {
-	h.subsMu.Lock()
-	delete(h.subs, sub)
+	h.subscribersMutex.Lock()
+	delete(h.subscribers, sub)
 	close(sub.ch)
-	h.subsMu.Unlock()
+	h.subscribersMutex.Unlock()
 }
 
 func (h *MetricHub) snapshot(prefixes []string) []entry {
