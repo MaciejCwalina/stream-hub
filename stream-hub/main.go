@@ -270,11 +270,16 @@ func (h *MetricHub) unsubscribe(sub *subscriber) {
 	h.subscribersMutex.Unlock()
 }
 
-func (h *MetricHub) snapshot(promPrefixes []string) []entry {
+func (h *MetricHub) snapshot(promPrefixes []string, window time.Duration) []entry {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	cutoff := time.Now().Add(-window)
 	var out []entry
 	for _, item := range h.history {
+		if item.timestamp.Before(cutoff) {
+			continue
+		}
+
 		if matchesAny(item.metric, promPrefixes) {
 			out = append(out, item)
 		}
@@ -331,13 +336,20 @@ func (h *MetricHub) handleStream(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	window := 60 * time.Second
+	if rawWindow := r.URL.Query().Get("window"); rawWindow != "" {
+		if parsed, parseErr := time.ParseDuration(rawWindow); parseErr == nil && parsed > 0 {
+			window = parsed
+		}
+	}
+
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
 	sub := h.subscribe(promPrefixes)
 	defer h.unsubscribe(sub)
 	// Snapshot first.
-	snap, err := encodeBatch("snapshot", h.snapshot(promPrefixes))
+	snap, err := encodeBatch("snapshot", h.snapshot(promPrefixes, window))
 	if err == nil {
 		if err := conn.WriteMessage(websocket.TextMessage, snap); err != nil {
 			return

@@ -1,0 +1,40 @@
+{
+  "name": "is-hotkey",
+  "description": "Check whether a browser event matches a hotkey.",
+  "version": "0.2.1",
+  "license": "MIT",
+  "repository": "git://github.com/ianstormtaylor/is-hotkey.git",
+  "main": "./lib/index.js",
+  "scripts": {
+    "build": "babel ./src --out-dir ./lib",
+    "build:umd": "babel --plugins transform-es2015-modules-umd ./src -o ./lib/is-hotkey.umd.js",
+    "clean": "rm -rf ./lib ./node_modules",
+    "prerelease": "yarn run build && yarn run build:umd",
+    "test": "yarn run build && mocha",
+    "watch": "babel ./lib --out-dir ./lib --watch"
+  },
+  "devDependencies": {
+    "@changesets/changelog-github": "^1.0.1",
+    "@changesets/cli": "^3.0.3",
+    "babel-cli": "^6.10.1",
+    "babel-plugin-transform-es2015-modules-umd": "^6.24.1",
+    "babel-preset-env": "^1.6.1",
+    "mocha": "^3.2.0"
+  },
+  "keywords": [
+    "code",
+    "combo",
+    "event",
+    "hotkey",
+    "key",
+    "keycode",
+    "keycodes",
+    "keycombo",
+    "keydown",
+    "keyup",
+    "mousetrap",
+    "shortcut",
+    "which"
+  ],
+  "packageManager": "yarn@4.18.1"
+}

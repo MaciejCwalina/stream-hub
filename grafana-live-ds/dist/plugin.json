@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/schema.json",
+  "id": "home-llm-live",
+  "type": "datasource",
+  "name": "Home LLM Live",
+  "metrics": true,
+  "backend": true,
+  "streaming": true,
+  "executable": "gpx_home_llm_live",
+  "info": {
+    "description": "Pushed metrics from the home LLM server stream-hub (WebSocket, no polling)",
+    "author": {
+      "name": "Maciej"
+    },
+    "version": "1.0.3",
+    "updated": "2026-11-12"
+  }
+}

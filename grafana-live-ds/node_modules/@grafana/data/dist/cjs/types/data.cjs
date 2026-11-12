@@ -1,0 +1,46 @@
+'use strict';
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+"use strict";
+var LoadingState = /* @__PURE__ */ ((LoadingState2) => {
+  LoadingState2["NotStarted"] = "NotStarted";
+  LoadingState2["Loading"] = "Loading";
+  LoadingState2["Streaming"] = "Streaming";
+  LoadingState2["Done"] = "Done";
+  LoadingState2["Error"] = "Error";
+  return LoadingState2;
+})(LoadingState || {});
+const preferredVisualizationTypes = [
+  "graph",
+  "table",
+  "logs",
+  "trace",
+  "nodeGraph",
+  "flamegraph",
+  "rawPrometheus"
+];
+var NullValueMode = /* @__PURE__ */ ((NullValueMode2) => {
+  NullValueMode2["Null"] = "null";
+  NullValueMode2["Ignore"] = "connected";
+  NullValueMode2["AsZero"] = "null as zero";
+  return NullValueMode2;
+})(NullValueMode || {});
+const isTruthy = (value) => Boolean(value);
+function identityObject(value) {
+  return value;
+}
+function isObject(value) {
+  if (typeof value === "object" && value !== null) {
+    identityObject(value);
+    return true;
+  }
+  return false;
+}
+
+exports.LoadingState = LoadingState;
+exports.NullValueMode = NullValueMode;
+exports.isObject = isObject;
+exports.isTruthy = isTruthy;
+exports.preferredVisualizationTypes = preferredVisualizationTypes;
+//# sourceMappingURL=data.cjs.map

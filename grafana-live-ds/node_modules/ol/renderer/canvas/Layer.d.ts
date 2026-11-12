@@ -1,0 +1,161 @@
+/**
+ * @type {Array<HTMLCanvasElement|OffscreenCanvas>}
+ */
+export const canvasPool: Array<HTMLCanvasElement | OffscreenCanvas>;
+export default CanvasLayerRenderer;
+/**
+ * @abstract
+ * @template {import("../../layer/Layer.js").default} LayerType
+ * @extends {LayerRenderer<LayerType>}
+ */
+declare class CanvasLayerRenderer<LayerType extends import("../../layer/Layer.js").default> extends LayerRenderer<LayerType> {
+    /**
+     * If possible, request viewport rotated content from the source.
+     * @protected
+     * @type {boolean}
+     */
+    protected wantRotation: boolean;
+    /**
+     * HTMLElement container for the layer to be rendered in.
+     * @protected
+     * @type {HTMLElement|null}
+     */
+    protected container: HTMLElement | null;
+    /**
+     * @protected
+     * @type {number}
+     */
+    protected renderedResolution: number;
+    /**
+     * A temporary transform.  The values in this transform should only be used in a
+     * function that sets the values.
+     * @protected
+     * @type {import("../../transform.js").Transform}
+     */
+    protected tempTransform: import("../../transform.js").Transform;
+    /**
+     * The transform for rendered pixels to viewport CSS pixels.  This transform must
+     * be set when rendering a frame and may be used by other functions after rendering.
+     * @protected
+     * @type {import("../../transform.js").Transform}
+     */
+    protected pixelTransform: import("../../transform.js").Transform;
+    /**
+     * The transform for viewport CSS pixels to rendered pixels.  This transform must
+     * be set when rendering a frame and may be used by other functions after rendering.
+     * @protected
+     * @type {import("../../transform.js").Transform}
+     */
+    protected inversePixelTransform: import("../../transform.js").Transform;
+    /**
+     * @type {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D|null}
+     */
+    context: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+    /**
+     * @private
+     * @type {ZIndexContext|null}
+     */
+    private deferredContext_;
+    /**
+     * true if the container has been reused from the previous renderer
+     * @type {boolean}
+     */
+    containerReused: boolean;
+    /**
+     * @protected
+     * @type {import("../../Map.js").FrameState|null|undefined}
+     */
+    protected frameState: import("../../Map.js").FrameState | null | undefined;
+    /**
+     * @param {import('../../DataTile.js').ImageLike} image Image.
+     * @param {number} col The column index.
+     * @param {number} row The row index.
+     * @return {Uint8ClampedArray|null} The image data.
+     */
+    getImageData(image: import("../../DataTile.js").ImageLike, col: number, row: number): Uint8ClampedArray | null;
+    /**
+     * @param {import('../../Map.js').FrameState} frameState Frame state.
+     * @return {string|undefined} Background color.
+     */
+    getBackground(frameState: import("../../Map.js").FrameState): string | undefined;
+    /**
+     * Get a rendering container from an existing target, if compatible.
+     * @param {HTMLElement|null} target Potential render target.
+     * @param {string|null} transform CSS transform matrix.
+     * @param {string} [backgroundColor] Background color.
+     * @param {number} [width] Physical pixel width of the rendering canvas.
+     * @param {number} [height] Physical pixel height of the rendering canvas.
+     */
+    useContainer(target: HTMLElement | null, transform: string | null, backgroundColor?: string, width?: number, height?: number): void;
+    /**
+     * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} context Context.
+     * @param {import("../../Map.js").FrameState} frameState Frame state.
+     * @param {import("../../extent.js").Extent} extent Clip extent.
+     * @protected
+     */
+    protected clipUnrotated(context: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, frameState: import("../../Map.js").FrameState, extent: import("../../extent.js").Extent): void;
+    /**
+     * @param {import("../../Map.js").FrameState} frameState Frame state.
+     * @param {HTMLElement} target Target that may be used to render content to.
+     * @protected
+     */
+    protected prepareContainer(frameState: import("../../Map.js").FrameState, target: HTMLElement): void;
+    /**
+     * @param {import("../../render/EventType.js").default} type Event type.
+     * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} context Context.
+     * @param {import("../../Map.js").FrameState} frameState Frame state.
+     * @private
+     */
+    private dispatchRenderEvent_;
+    /**
+     * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} context Context.
+     * @param {import("../../Map.js").FrameState} frameState Frame state.
+     * @protected
+     */
+    protected preRender(context: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, frameState: import("../../Map.js").FrameState): void;
+    /**
+     * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} context Context.
+     * @param {import("../../Map.js").FrameState} frameState Frame state.
+     * @protected
+     */
+    protected postRender(context: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, frameState: import("../../Map.js").FrameState): void;
+    /**
+     * @param {import("../../Map.js").FrameState} frameState Frame state.
+     */
+    renderDeferredInternal(frameState: import("../../Map.js").FrameState): void;
+    /**
+     * @param {import("../../Map.js").FrameState} frameState Frame state.
+     * @return {import('../../render/canvas/ZIndexContext.js').ZIndexContextProxy} Context.
+     */
+    getRenderContext(frameState: import("../../Map.js").FrameState): import("../../render/canvas/ZIndexContext.js").ZIndexContextProxy;
+    /**
+     * @protected
+     * @return {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} Canvas rendering context.
+     */
+    protected getCanvasContext(): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+    /**
+     * @protected
+     * @return {HTMLElement} Canvas container element.
+     */
+    protected getContainerElement(): HTMLElement;
+    /**
+     * Creates a transform for rendering to an element that will be rotated after rendering.
+     * @param {import("../../coordinate.js").Coordinate} center Center.
+     * @param {number} resolution Resolution.
+     * @param {number} rotation Rotation.
+     * @param {number} pixelRatio Pixel ratio.
+     * @param {number} width Width of the rendered element (in pixels).
+     * @param {number} height Height of the rendered element (in pixels).
+     * @param {number} offsetX Offset on the x-axis in view coordinates.
+     * @protected
+     * @return {!import("../../transform.js").Transform} Transform.
+     */
+    protected getRenderTransform(center: import("../../coordinate.js").Coordinate, resolution: number, rotation: number, pixelRatio: number, width: number, height: number, offsetX: number): import("../../transform.js").Transform;
+    /**
+     * @protected
+     * @return {boolean} Request rotation from the source.
+     */
+    protected sourceRotates(): boolean;
+}
+import LayerRenderer from '../Layer.js';
+//# sourceMappingURL=Layer.d.ts.map

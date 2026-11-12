@@ -1,0 +1,398 @@
+/**
+ * @module ol/format/WMTSCapabilities
+ */
+import {boundingExtent} from '../extent.js';
+import {
+  makeArrayPusher,
+  makeObjectPropertyPusher,
+  makeObjectPropertySetter,
+  makeParsersNS,
+  pushParseAndPop,
+} from '../xml.js';
+import OWS from './OWS.js';
+import XML from './XML.js';
+import {readHref} from './xlink.js';
+import {readDecimal, readPositiveInteger, readString} from './xsd.js';
+
+/**
+ * @typedef {Object<string, *>} WMTSObject
+ */
+
+/**
+ * @const
+ * @type {Array<null|string>}
+ */
+const NAMESPACE_URIS = [null, 'http://www.opengis.net/wmts/1.0'];
+
+/**
+ * @const
+ * @type {Array<null|string>}
+ */
+const OWS_NAMESPACE_URIS = [null, 'http://www.opengis.net/ows/1.1'];
+
+/**
+ * @type {import("../xml.js").ParsersNS}
+ */
+const PARSERS = makeParsersNS(NAMESPACE_URIS, {
+  'Contents': makeObjectPropertySetter(readContents),
+});
+
+/**
+ * @classdesc
+ * Format for reading WMTS capabilities data.
+ *
+ * @api
+ */
+class WMTSCapabilities extends XML {
+  constructor() {
+    super();
+
+    /**
+     * @type {OWS}
+     * @private
+     */
+    this.owsParser_ = new OWS();
+  }
+
+  /**
+   * @param {Element} node Node.
+   * @return {Object|null} Object
+   * @override
+   */
+  readFromNode(node) {
+    let version = node.getAttribute('version');
+    if (version) {
+      version = version.trim();
+    }
+    let WMTSCapabilityObject = /** @type {WMTSObject} */ (
+      this.owsParser_.readFromNode(node)
+    );
+    if (!WMTSCapabilityObject) {
+      return null;
+    }
+    WMTSCapabilityObject['version'] = version;
+    WMTSCapabilityObject = pushParseAndPop(
+      WMTSCapabilityObject,
+      PARSERS,
+      node,
+      [],
+    );
+    return WMTSCapabilityObject ? WMTSCapabilityObject : null;
+  }
+}
+
+/**
+ * @type {import("../xml.js").ParsersNS}
+ */
+const CONTENTS_PARSERS = makeParsersNS(NAMESPACE_URIS, {
+  'Layer': makeObjectPropertyPusher(readLayer),
+  'TileMatrixSet': makeObjectPropertyPusher(readTileMatrixSet),
+});
+
+/**
+ * @type {import("../xml.js").ParsersNS}
+ */
+const LAYER_PARSERS = makeParsersNS(
+  NAMESPACE_URIS,
+  {
+    'Style': makeObjectPropertyPusher(readStyle),
+    'Format': makeObjectPropertyPusher(readString),
+    'TileMatrixSetLink': makeObjectPropertyPusher(readTileMatrixSetLink),
+    'Dimension': makeObjectPropertyPusher(readDimensions),
+    'ResourceURL': makeObjectPropertyPusher(readResourceUrl),
+  },
+  makeParsersNS(OWS_NAMESPACE_URIS, {
+    'Title': makeObjectPropertySetter(readString),
+    'Abstract': makeObjectPropertySetter(readString),
+    'WGS84BoundingBox': makeObjectPropertySetter(readBoundingBox),
+    'BoundingBox': makeObjectPropertyPusher(readBoundingBoxWithCrs),
+    'Identifier': makeObjectPropertySetter(readString),
+  }),
+);
+
+/**
+ * @type {import("../xml.js").ParsersNS}
+ */
+const STYLE_PARSERS = makeParsersNS(
+  NAMESPACE_URIS,
+  {
+    'LegendURL': makeObjectPropertyPusher(readLegendUrl),
+  },
+  makeParsersNS(OWS_NAMESPACE_URIS, {
+    'Title': makeObjectPropertySetter(readString),
+    'Identifier': makeObjectPropertySetter(readString),
+  }),
+);
+
+/**
+ * @type {import("../xml.js").ParsersNS}
+ */
+const TMS_LINKS_PARSERS = makeParsersNS(NAMESPACE_URIS, {
+  'TileMatrixSet': makeObjectPropertySetter(readString),
+  'TileMatrixSetLimits': makeObjectPropertySetter(readTileMatrixLimitsList),
+});
+
+/**
+ * @type {import("../xml.js").ParsersNS}
+ */
+const TMS_LIMITS_LIST_PARSERS = makeParsersNS(NAMESPACE_URIS, {
+  'TileMatrixLimits': makeArrayPusher(readTileMatrixLimits),
+});
+
+/**
+ * @type {import("../xml.js").ParsersNS}
+ */
+const TMS_LIMITS_PARSERS = makeParsersNS(NAMESPACE_URIS, {
+  'TileMatrix': makeObjectPropertySetter(readString),
+  'MinTileRow': makeObjectPropertySetter(readPositiveInteger),
+  'MaxTileRow': makeObjectPropertySetter(readPositiveInteger),
+  'MinTileCol': makeObjectPropertySetter(readPositiveInteger),
+  'MaxTileCol': makeObjectPropertySetter(readPositiveInteger),
+});
+
+/**
+ * @type {import("../xml.js").ParsersNS}
+ */
+const DIMENSION_PARSERS = makeParsersNS(
+  NAMESPACE_URIS,
+  {
+    'Default': makeObjectPropertySetter(readString),
+    'Value': makeObjectPropertyPusher(readString),
+  },
+  makeParsersNS(OWS_NAMESPACE_URIS, {
+    'Identifier': makeObjectPropertySetter(readString),
+  }),
+);
+
+/**
+ * @type {import("../xml.js").ParsersNS}
+ */
+const WGS84_BBOX_READERS = makeParsersNS(OWS_NAMESPACE_URIS, {
+  'LowerCorner': makeArrayPusher(readCoordinates),
+  'UpperCorner': makeArrayPusher(readCoordinates),
+});
+
+/**
+ * @type {import("../xml.js").ParsersNS}
+ */
+const TMS_PARSERS = makeParsersNS(
+  NAMESPACE_URIS,
+  {
+    'WellKnownScaleSet': makeObjectPropertySetter(readString),
+    'TileMatrix': makeObjectPropertyPusher(readTileMatrix),
+  },
+  makeParsersNS(OWS_NAMESPACE_URIS, {
+    'SupportedCRS': makeObjectPropertySetter(readString),
+    'Identifier': makeObjectPropertySetter(readString),
+    'BoundingBox': makeObjectPropertySetter(readBoundingBox),
+  }),
+);
+
+/**
+ * @type {import("../xml.js").ParsersNS}
+ */
+const TM_PARSERS = makeParsersNS(
+  NAMESPACE_URIS,
+  {
+    'TopLeftCorner': makeObjectPropertySetter(readCoordinates),
+    'ScaleDenominator': makeObjectPropertySetter(readDecimal),
+    'TileWidth': makeObjectPropertySetter(readPositiveInteger),
+    'TileHeight': makeObjectPropertySetter(readPositiveInteger),
+    'MatrixWidth': makeObjectPropertySetter(readPositiveInteger),
+    'MatrixHeight': makeObjectPropertySetter(readPositiveInteger),
+  },
+  makeParsersNS(OWS_NAMESPACE_URIS, {
+    'Identifier': makeObjectPropertySetter(readString),
+  }),
+);
+
+/**
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Object|undefined} Attribution object.
+ */
+function readContents(node, objectStack) {
+  return pushParseAndPop({}, CONTENTS_PARSERS, node, objectStack);
+}
+
+/**
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Object|undefined} Layers object.
+ */
+function readLayer(node, objectStack) {
+  return pushParseAndPop({}, LAYER_PARSERS, node, objectStack);
+}
+
+/**
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Object|undefined} Tile Matrix Set object.
+ */
+function readTileMatrixSet(node, objectStack) {
+  return pushParseAndPop({}, TMS_PARSERS, node, objectStack);
+}
+
+/**
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Object|undefined} Style object.
+ */
+function readStyle(node, objectStack) {
+  const style = /** @type {WMTSObject|undefined} */ (
+    pushParseAndPop({}, STYLE_PARSERS, node, objectStack)
+  );
+  if (!style) {
+    return undefined;
+  }
+  const isDefault = node.getAttribute('isDefault') === 'true';
+  style['isDefault'] = isDefault;
+  return style;
+}
+
+/**
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Object|undefined} Tile Matrix Set Link object.
+ */
+function readTileMatrixSetLink(node, objectStack) {
+  return pushParseAndPop({}, TMS_LINKS_PARSERS, node, objectStack);
+}
+
+/**
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Object|undefined} Dimension object.
+ */
+function readDimensions(node, objectStack) {
+  return pushParseAndPop({}, DIMENSION_PARSERS, node, objectStack);
+}
+
+/**
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Object|undefined} Resource URL object.
+ */
+function readResourceUrl(node, objectStack) {
+  const format = node.getAttribute('format');
+  const template = node.getAttribute('template');
+  const resourceType = node.getAttribute('resourceType');
+  const resource = {};
+  if (format) {
+    resource['format'] = format;
+  }
+  if (template) {
+    resource['template'] = template;
+  }
+  if (resourceType) {
+    resource['resourceType'] = resourceType;
+  }
+  return resource;
+}
+
+/**
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Object|undefined} BBox object.
+ */
+function readBoundingBox(node, objectStack) {
+  /** @type {Array<Array<number>>} */
+  const coordinates = /** @type {Array<Array<number>>} */ (
+    pushParseAndPop([], WGS84_BBOX_READERS, node, objectStack) ?? []
+  );
+  if (coordinates.length != 2) {
+    return undefined;
+  }
+  return boundingExtent(
+    /** @type {[import("../coordinate.js").Coordinate, import("../coordinate.js").Coordinate]} */ (
+      coordinates
+    ),
+  );
+}
+
+/**
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Object|undefined} BBox object.
+ */
+function readBoundingBoxWithCrs(node, objectStack) {
+  const crs = node.getAttribute('crs');
+  /** @type {Array<Array<number>>} */
+  const coordinates = /** @type {Array<Array<number>>} */ (
+    pushParseAndPop([], WGS84_BBOX_READERS, node, objectStack) ?? []
+  );
+  if (coordinates.length != 2) {
+    return undefined;
+  }
+  return {
+    extent: boundingExtent(
+      /** @type {[import("../coordinate.js").Coordinate, import("../coordinate.js").Coordinate]} */ (
+        coordinates
+      ),
+    ),
+    crs: crs,
+  };
+}
+
+/**
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Object|undefined} Legend object.
+ */
+function readLegendUrl(node, objectStack) {
+  const legend = {};
+  legend['format'] = node.getAttribute('format');
+  legend['href'] = readHref(node);
+  return legend;
+}
+
+/**
+ * @param {Node} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Object|undefined} Coordinates object.
+ */
+function readCoordinates(node, objectStack) {
+  const text = readString(node);
+  if (!text) {
+    return undefined;
+  }
+  const coordinates = text.split(/\s+/);
+  if (!coordinates || coordinates.length != 2) {
+    return undefined;
+  }
+  const x = +coordinates[0];
+  const y = +coordinates[1];
+  if (isNaN(x) || isNaN(y)) {
+    return undefined;
+  }
+  return [x, y];
+}
+
+/**
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Object|undefined} TileMatrix object.
+ */
+function readTileMatrix(node, objectStack) {
+  return pushParseAndPop({}, TM_PARSERS, node, objectStack);
+}
+
+/**
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Object|undefined} TileMatrixSetLimits Object.
+ */
+function readTileMatrixLimitsList(node, objectStack) {
+  return pushParseAndPop([], TMS_LIMITS_LIST_PARSERS, node, objectStack);
+}
+
+/**
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Object|undefined} TileMatrixLimits Array.
+ */
+function readTileMatrixLimits(node, objectStack) {
+  return pushParseAndPop({}, TMS_LIMITS_PARSERS, node, objectStack);
+}
+
+export default WMTSCapabilities;
