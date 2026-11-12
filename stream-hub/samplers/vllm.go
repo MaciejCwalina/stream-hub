@@ -9,9 +9,12 @@ import (
 )
 
 type vllmState struct {
-	genTokens, promptTokens, accepted, drafts float64
-	last                                      time.Time
-	primed                                    bool // first scrape only primes counters (avoids a rate spike)
+	genTokens    float64
+	promptTokens float64
+	accepted     float64
+	drafts       float64
+	last         time.Time
+	primed       bool // first scrape only primes counters (avoids a rate spike)
 }
 
 // vllmSum sums all sample values for one metric name in Prometheus text exposition format.
