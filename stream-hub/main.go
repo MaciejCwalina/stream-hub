@@ -5,11 +5,12 @@
 //   - nvidia-smi polled every 500ms (per-card temp, memory clock, power, utilization)
 //
 // Push endpoint (event metrics):
-//   - POST /push  {"m":"vram_oc.xid_errors","v":1}  (used by vram-oc-guard)
+//   - POST /push  {"metric":"vram_oc.xid_errors","value":1}  (used by vram-oc-guard)
 //
 // Fan-out:
 //   - WS /stream?metrics=prefix1,prefix2 — on connect the client receives a snapshot
 //     (recent history for the requested prefixes), then update batches (~100ms cadence).
+//
 // Message format: {"type":"snapshot|update","data":[[metric, unix_ms, value], ...]}
 package main
 
@@ -96,9 +97,9 @@ func (h *Hub) Broadcaster(ctx context.Context, interval time.Duration) {
 				filtered := batch
 				if len(sub.prefixes) > 0 {
 					filtered = nil
-					for _, e := range batch {
-						if matchesAny(e.metric, sub.prefixes) {
-							filtered = append(filtered, e)
+					for _, item := range batch {
+						if matchesAny(item.metric, sub.prefixes) {
+							filtered = append(filtered, item)
 						}
 					}
 				}
@@ -134,9 +135,9 @@ func (h *Hub) snapshot(prefixes []string) []entry {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	var out []entry
-	for _, e := range h.hist {
-		if matchesAny(e.metric, prefixes) {
-			out = append(out, e)
+	for _, item := range h.hist {
+		if matchesAny(item.metric, prefixes) {
+			out = append(out, item)
 		}
 	}
 	if len(out) > 5000 {
@@ -149,8 +150,8 @@ func matchesAny(metric string, prefixes []string) bool {
 	if len(prefixes) == 0 {
 		return true
 	}
-	for _, p := range prefixes {
-		if strings.HasPrefix(metric, p) {
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(metric, prefix) {
 			return true
 		}
 	}
@@ -159,8 +160,8 @@ func matchesAny(metric string, prefixes []string) bool {
 
 func encodeBatch(typ string, data []entry) ([]byte, error) {
 	rows := make([][]any, 0, len(data))
-	for _, e := range data {
-		rows = append(rows, []any{e.metric, e.ts.UnixMilli(), e.value})
+	for _, item := range data {
+		rows = append(rows, []any{item.metric, item.ts.UnixMilli(), item.value})
 	}
 	return json.Marshal(map[string]any{"type": typ, "data": rows})
 }
@@ -176,10 +177,10 @@ func (h *Hub) handleStream(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	var prefixes []string
-	if q := r.URL.Query().Get("metrics"); q != "" {
-		for _, p := range strings.Split(q, ",") {
-			if p = strings.TrimSpace(p); p != "" {
-				prefixes = append(prefixes, p)
+	if query := r.URL.Query().Get("metrics"); query != "" {
+		for _, part := range strings.Split(query, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				prefixes = append(prefixes, part)
 			}
 		}
 	}
@@ -215,8 +216,8 @@ func (h *Hub) handleStream(w http.ResponseWriter, r *http.Request) {
 }
 
 type pushMsg struct {
-	M string  `json:"m"`
-	V float64 `json:"v"`
+	Metric string  `json:"metric"`
+	Value  float64 `json:"value"`
 }
 
 func (h *Hub) handlePush(w http.ResponseWriter, r *http.Request) {
@@ -229,16 +230,16 @@ func (h *Hub) handlePush(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(body, &msgs); err != nil {
 		var single pushMsg
 		if err := json.Unmarshal(body, &single); err != nil {
-			http.Error(w, "bad json: expected {m,v} or [{m,v},...]", http.StatusBadRequest)
+			http.Error(w, "bad json: expected {metric,value} or [{metric,value},...]", http.StatusBadRequest)
 			return
 		}
 		msgs = []pushMsg{single}
 	}
-	for _, m := range msgs {
-		if m.M == "" {
+	for _, message := range msgs {
+		if message.Metric == "" {
 			continue
 		}
-		h.record(m.M, m.V)
+		h.record(message.Metric, message.Value)
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -247,8 +248,8 @@ func (h *Hub) handlePush(w http.ResponseWriter, r *http.Request) {
 
 type vllmState struct {
 	genTokens, promptTokens, accepted, drafts float64
-	last                                     time.Time
-	primed                                   bool // first scrape only primes counters (avoids a rate spike)
+	last                                      time.Time
+	primed                                    bool // first scrape only primes counters (avoids a rate spike)
 }
 
 // vllmSum sums all sample values for one metric name in Prometheus text exposition format.
@@ -263,11 +264,11 @@ func vllmSum(text, name string) (float64, bool) {
 		if idx < 0 {
 			continue
 		}
-		v, err := strconv.ParseFloat(line[idx+1:], 64)
+		value, err := strconv.ParseFloat(line[idx+1:], 64)
 		if err != nil {
 			continue
 		}
-		total += v
+		total += value
 		found = true
 	}
 	return total, found
@@ -341,8 +342,8 @@ func loadGPUNames() map[string]string {
 		return names
 	}
 	re := regexp.MustCompile(`gpu_card_info\{uuid="([^"]+)",card="([^"]+)"\}`)
-	for _, m := range re.FindAllSubmatch(data, -1) {
-		names[string(m[1])] = strings.ToLower(strings.TrimSpace(string(m[2])))
+	for _, match := range re.FindAllSubmatch(data, -1) {
+		names[string(match[1])] = strings.ToLower(strings.TrimSpace(string(match[2])))
 	}
 	return names
 }
@@ -358,27 +359,27 @@ func (h *Hub) sampleGPU(interval time.Duration) {
 			continue
 		}
 		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-		for i, line := range lines {
+		for index, line := range lines {
 			fields := strings.Split(line, ",")
 			if len(fields) < 6 {
 				continue
 			}
 			uuid := strings.ToLower(strings.TrimSpace(fields[0]))
-		uuid = strings.TrimPrefix(uuid, "gpu-")
-			card := fmt.Sprintf("gpu%d", i)
+			uuid = strings.TrimPrefix(uuid, "gpu-")
+			card := fmt.Sprintf("gpu%d", index)
 			if friendly, ok := names[uuid]; ok {
 				card = sanitizeRe.ReplaceAllString(friendly, "_")
 			} else {
 				card += "_" + sanitizeRe.ReplaceAllString(strings.ToLower(fields[1]), "_")
 			}
 			values := []float64{}
-			for _, f := range fields[2:] {
-				v, err := strconv.ParseFloat(strings.TrimSpace(f), 64)
+			for _, field := range fields[2:] {
+				value, err := strconv.ParseFloat(strings.TrimSpace(field), 64)
 				if err != nil {
 					values = nil
 					break
 				}
-				values = append(values, v)
+				values = append(values, value)
 			}
 			if len(values) != 4 {
 				continue
