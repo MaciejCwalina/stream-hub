@@ -52,6 +52,7 @@ func VLLM(recorder Recorder, url string, interval time.Duration) {
 		if err != nil {
 			continue
 		}
+
 		text, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
