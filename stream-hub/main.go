@@ -71,6 +71,7 @@ func (h *Hub) record(metric string, value float64) {
 	if len(h.hist) > historyCap {
 		h.hist = h.hist[len(h.hist)-historyCap:]
 	}
+
 	h.pending = append(h.pending, entry{metric, now, value})
 	h.mu.Unlock()
 }
@@ -92,6 +93,7 @@ func (h *Hub) Broadcaster(ctx context.Context, interval time.Duration) {
 			if len(batch) == 0 {
 				continue
 			}
+
 			h.subsMu.Lock()
 			for sub := range h.subs {
 				filtered := batch
@@ -103,14 +105,17 @@ func (h *Hub) Broadcaster(ctx context.Context, interval time.Duration) {
 						}
 					}
 				}
+
 				if len(filtered) == 0 {
 					continue
 				}
+
 				select {
 				case sub.ch <- filtered:
 				default: // slow client: drop the batch rather than block
 				}
 			}
+
 			h.subsMu.Unlock()
 		}
 	}
@@ -140,9 +145,11 @@ func (h *Hub) snapshot(prefixes []string) []entry {
 			out = append(out, item)
 		}
 	}
+
 	if len(out) > 5000 {
 		out = out[len(out)-5000:]
 	}
+
 	return out
 }
 
@@ -150,6 +157,7 @@ func matchesAny(metric string, prefixes []string) bool {
 	if len(prefixes) == 0 {
 		return true
 	}
+
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(metric, prefix) {
 			return true
@@ -163,6 +171,7 @@ func encodeBatch(typ string, data []entry) ([]byte, error) {
 	for _, item := range data {
 		rows = append(rows, []any{item.metric, item.ts.UnixMilli(), item.value})
 	}
+
 	return json.Marshal(map[string]any{"type": typ, "data": rows})
 }
 
@@ -174,6 +183,7 @@ func (h *Hub) handleStream(w http.ResponseWriter, r *http.Request) {
 		log.Printf("ws accept: %v", err)
 		return
 	}
+
 	defer conn.Close()
 
 	var prefixes []string
@@ -208,6 +218,7 @@ func (h *Hub) handleStream(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				continue
 			}
+
 			if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
 				return
 			}
@@ -235,10 +246,12 @@ func (h *Hub) handlePush(w http.ResponseWriter, r *http.Request) {
 		}
 		msgs = []pushMsg{single}
 	}
+
 	for _, message := range msgs {
 		if message.Metric == "" {
 			continue
 		}
+
 		h.record(message.Metric, message.Value)
 	}
 	w.WriteHeader(http.StatusOK)
@@ -260,14 +273,17 @@ func vllmSum(text, name string) (float64, bool) {
 		if rest == line || len(rest) == 0 || (rest[0] != '{' && rest[0] != ' ') {
 			continue // not this metric (guards against prefix collisions)
 		}
+
 		idx := strings.LastIndex(line, " ")
 		if idx < 0 {
 			continue
 		}
+
 		value, err := strconv.ParseFloat(line[idx+1:], 64)
 		if err != nil {
 			continue
 		}
+
 		total += value
 		found = true
 	}
@@ -305,24 +321,30 @@ func (h *Hub) sampleVLLM(url string, interval time.Duration) {
 		if dt <= 0 {
 			continue
 		}
+
 		if gen > st.genTokens && !first {
 			h.record("vllm.tok_s", (gen-st.genTokens)/dt)
 		}
+
 		st.genTokens = gen
 		if prompt > st.promptTokens && !first {
 			h.record("vllm.prompt_tok_s", (prompt-st.promptTokens)/dt)
 		}
+
 		st.promptTokens = prompt
 		if drafts > st.drafts && drafts > 0 {
 			h.record("vllm.spec_accept", (acc-st.accepted)/(drafts-st.drafts))
 			st.accepted, st.drafts = acc, drafts
 		}
+
 		if hasRunning {
 			h.record("vllm.running", running)
 		}
+
 		if waiting > 0 {
 			h.record("vllm.waiting", waiting)
 		}
+
 		if kv > 0 {
 			h.record("vllm.kv_usage", kv)
 		}
@@ -341,10 +363,12 @@ func loadGPUNames() map[string]string {
 	if err != nil {
 		return names
 	}
+
 	re := regexp.MustCompile(`gpu_card_info\{uuid="([^"]+)",card="([^"]+)"\}`)
 	for _, match := range re.FindAllSubmatch(data, -1) {
 		names[string(match[1])] = strings.ToLower(strings.TrimSpace(string(match[2])))
 	}
+
 	return names
 }
 
@@ -358,12 +382,14 @@ func (h *Hub) sampleGPU(interval time.Duration) {
 		if err != nil {
 			continue
 		}
+
 		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 		for index, line := range lines {
 			fields := strings.Split(line, ",")
 			if len(fields) < 6 {
 				continue
 			}
+
 			uuid := strings.ToLower(strings.TrimSpace(fields[0]))
 			uuid = strings.TrimPrefix(uuid, "gpu-")
 			card := fmt.Sprintf("gpu%d", index)
@@ -372,6 +398,7 @@ func (h *Hub) sampleGPU(interval time.Duration) {
 			} else {
 				card += "_" + sanitizeRe.ReplaceAllString(strings.ToLower(fields[1]), "_")
 			}
+
 			values := []float64{}
 			for _, field := range fields[2:] {
 				value, err := strconv.ParseFloat(strings.TrimSpace(field), 64)
@@ -379,11 +406,14 @@ func (h *Hub) sampleGPU(interval time.Duration) {
 					values = nil
 					break
 				}
+
 				values = append(values, value)
 			}
+
 			if len(values) != 4 {
 				continue
 			}
+
 			h.record(card+".temp_c", values[0])
 			h.record(card+".mem_clock_mhz", values[1]/1000.0) // nvidia-smi reports kHz
 			h.record(card+".power_w", values[2])
