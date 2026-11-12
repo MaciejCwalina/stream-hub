@@ -40,8 +40,8 @@ type entry struct {
 }
 
 type subscriber struct {
-	ch       chan []entry
-	prefixes []string
+	ch           chan []entry
+	promPrefixes []string
 }
 
 type MetricHub struct {
@@ -95,10 +95,10 @@ func (h *MetricHub) Broadcaster(ctx context.Context, interval time.Duration) {
 			h.subscribersMutex.Lock()
 			for sub := range h.subscribers {
 				filtered := batch
-				if len(sub.prefixes) > 0 {
+				if len(sub.promPrefixes) > 0 {
 					filtered = nil
 					for _, item := range batch {
-						if matchesAny(item.metric, sub.prefixes) {
+						if matchesAny(item.metric, sub.promPrefixes) {
 							filtered = append(filtered, item)
 						}
 					}
@@ -119,8 +119,8 @@ func (h *MetricHub) Broadcaster(ctx context.Context, interval time.Duration) {
 	}
 }
 
-func (h *MetricHub) subscribe(prefixes []string) *subscriber {
-	sub := &subscriber{ch: make(chan []entry, 16), prefixes: prefixes}
+func (h *MetricHub) subscribe(promPrefixes []string) *subscriber {
+	sub := &subscriber{ch: make(chan []entry, 16), promPrefixes: promPrefixes}
 	h.subscribersMutex.Lock()
 	h.subscribers[sub] = struct{}{}
 	h.subscribersMutex.Unlock()
@@ -134,12 +134,12 @@ func (h *MetricHub) unsubscribe(sub *subscriber) {
 	h.subscribersMutex.Unlock()
 }
 
-func (h *MetricHub) snapshot(prefixes []string) []entry {
+func (h *MetricHub) snapshot(promPrefixes []string) []entry {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	var out []entry
 	for _, item := range h.history {
-		if matchesAny(item.metric, prefixes) {
+		if matchesAny(item.metric, promPrefixes) {
 			out = append(out, item)
 		}
 	}
@@ -151,12 +151,12 @@ func (h *MetricHub) snapshot(prefixes []string) []entry {
 	return out
 }
 
-func matchesAny(metric string, prefixes []string) bool {
-	if len(prefixes) == 0 {
+func matchesAny(metric string, promPrefixes []string) bool {
+	if len(promPrefixes) == 0 {
 		return true
 	}
 
-	for _, prefix := range prefixes {
+	for _, prefix := range promPrefixes {
 		if strings.HasPrefix(metric, prefix) {
 			return true
 		}
@@ -184,11 +184,11 @@ func (h *MetricHub) handleStream(w http.ResponseWriter, r *http.Request) {
 
 	defer conn.Close()
 
-	var prefixes []string
+	var promPrefixes []string
 	if query := r.URL.Query().Get("metrics"); query != "" {
 		for _, part := range strings.Split(query, ",") {
 			if part = strings.TrimSpace(part); part != "" {
-				prefixes = append(prefixes, part)
+				promPrefixes = append(promPrefixes, part)
 			}
 		}
 	}
@@ -196,10 +196,10 @@ func (h *MetricHub) handleStream(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	sub := h.subscribe(prefixes)
+	sub := h.subscribe(promPrefixes)
 	defer h.unsubscribe(sub)
 	// Snapshot first.
-	snap, err := encodeBatch("snapshot", h.snapshot(prefixes))
+	snap, err := encodeBatch("snapshot", h.snapshot(promPrefixes))
 	if err == nil {
 		if err := conn.WriteMessage(websocket.TextMessage, snap); err != nil {
 			return
