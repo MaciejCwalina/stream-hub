@@ -39,6 +39,7 @@ func vllmSum(text string, name string) (float64, bool) {
 		total += value
 		found = true
 	}
+
 	return total, found
 }
 

@@ -30,10 +30,12 @@ func NewDatasource(_ context.Context, settings backend.DataSourceInstanceSetting
 		if err := json.Unmarshal(settings.JSONData, &cfg); err != nil {
 			return nil, fmt.Errorf("unmarshal jsonData: %w", err)
 		}
+
 		if cfg.HubURL != "" {
 			ds.cfg.HubURL = cfg.HubURL
 		}
 	}
+
 	return ds, nil
 }
 
@@ -68,6 +70,7 @@ func (d *Datasource) CheckHealth(_ context.Context, _ *backend.CheckHealthReques
 			Message: fmt.Sprintf("cannot reach stream-hub at %s: %v", d.cfg.HubURL, err),
 		}, nil
 	}
+
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return &backend.CheckHealthResult{
@@ -75,16 +78,18 @@ func (d *Datasource) CheckHealth(_ context.Context, _ *backend.CheckHealthReques
 			Message: fmt.Sprintf("stream-hub returned HTTP %d", resp.StatusCode),
 		}, nil
 	}
+
 	return &backend.CheckHealthResult{Status: backend.HealthStatusOk, Message: "stream-hub reachable"}, nil
 }
 
 // QueryData is not used: this datasource is streaming-only.
 func (d *Datasource) QueryData(_ context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	responses := make(backend.Responses, len(req.Queries))
-	for _, q := range req.Queries {
-		responses[q.RefID] = backend.DataResponse{
+	for _, query := range req.Queries {
+		responses[query.RefID] = backend.DataResponse{
 			Frames: data.Frames{data.NewFrame("empty")},
 		}
 	}
+
 	return &backend.QueryDataResponse{Responses: responses}, nil
 }

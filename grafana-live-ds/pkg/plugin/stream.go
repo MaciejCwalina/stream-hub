@@ -22,8 +22,8 @@ func (d *Datasource) PublishStream(_ context.Context, _ *backend.PublishStreamRe
 }
 
 type hubMessage struct {
-	Type string    `json:"type"`
-	Data [][]any   `json:"data"` // rows: [metric, unix_ms, value]
+	Type string  `json:"type"`
+	Data [][]any `json:"data"` // rows: [metric, unix_ms, value]
 }
 
 // RunStream subscribes to the stream-hub and pushes one frame per metric update
@@ -33,8 +33,8 @@ func (d *Datasource) RunStream(ctx context.Context, req *backend.RunStreamReques
 	_ = json.Unmarshal(req.Data, &query)
 
 	wsURL := d.cfg.HubURL
-	if p := strings.TrimSpace(query.Pattern); p != "" {
-		wsURL += "?metrics=" + url.QueryEscape(p)
+	if pattern := strings.TrimSpace(query.Pattern); pattern != "" {
+		wsURL += "?metrics=" + url.QueryEscape(pattern)
 	}
 
 	for ctx.Err() == nil {
@@ -46,6 +46,7 @@ func (d *Datasource) RunStream(ctx context.Context, req *backend.RunStreamReques
 				return ctx.Err()
 			case <-time.After(time.Second):
 			}
+
 			continue
 		}
 
@@ -54,10 +55,12 @@ func (d *Datasource) RunStream(ctx context.Context, req *backend.RunStreamReques
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+
 		if streamErr != nil {
 			log.Printf("home-llm-live: stream: %v", streamErr)
 		}
 	}
+
 	return ctx.Err()
 }
 
@@ -67,16 +70,19 @@ func (d *Datasource) runConnection(ctx context.Context, conn *websocket.Conn, se
 		if err := conn.ReadJSON(&msg); err != nil {
 			return err
 		}
+
 		for _, row := range msg.Data {
 			if len(row) != 3 {
 				continue
 			}
+
 			metric, ok1 := row[0].(string)
 			ts, ok2 := row[1].(float64)
 			value, ok3 := row[2].(float64)
 			if !ok1 || !ok2 || !ok3 || metric == "" {
 				continue
 			}
+
 			frame := data.NewFrame(metric,
 				data.NewField("time", nil, []time.Time{time.UnixMilli(int64(ts))}),
 				data.NewField(metric, nil, []float64{value}))

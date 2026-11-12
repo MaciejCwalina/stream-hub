@@ -161,6 +161,7 @@ func matchesAny(metric string, promPrefixes []string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -235,6 +236,7 @@ func (h *MetricHub) handlePush(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	var msgs []pushMsg
 	if err := json.Unmarshal(body, &msgs); err != nil {
 		var single pushMsg
@@ -242,6 +244,7 @@ func (h *MetricHub) handlePush(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "bad json: expected {metric,value} or [{metric,value},...]", http.StatusBadRequest)
 			return
 		}
+
 		msgs = []pushMsg{single}
 	}
 
