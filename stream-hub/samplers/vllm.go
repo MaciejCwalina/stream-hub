@@ -43,7 +43,7 @@ func vllmSum(text string, name string) (float64, bool) {
 }
 
 // VLLM polls the vLLM metrics endpoint and records derived metrics.
-func VLLM(recorder Recorder, url string, interval time.Duration) {
+func VLLM(recorder func(metric string, value float64), url string, interval time.Duration) {
 	st := &vllmState{last: time.Now()}
 	client := &http.Client{Timeout: 500 * time.Millisecond}
 	for {

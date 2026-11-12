@@ -30,7 +30,7 @@ func loadGPUNames() map[string]string {
 }
 
 // GPU samples nvidia-smi and records per-card metrics.
-func GPU(recorder Recorder, interval time.Duration) {
+func GPU(recorder func(metric string, value float64), interval time.Duration) {
 	names := loadGPUNames()
 	for {
 		time.Sleep(interval)
