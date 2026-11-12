@@ -27,12 +27,14 @@ export class LiveDatasource extends DataSourceApi<LiveQuery, LiveDSOptions> {
   }
 
   query(request: DataQueryRequest<LiveQuery>): Observable<DataQueryResponse> {
+    // Channel IDs allow only [A-z0-9_\-/=.]; the real pattern travels in `data`,
+    // so the path is just a sanitized unique id per target.
     const streams = request.targets.map((target) =>
       getGrafanaLiveSrv().getDataStream({
         addr: {
           scope: LiveChannelScope.DataSource,
           stream: this.uid,
-          path: `${target.refId}:${target.pattern ?? ""}`,
+          path: `${target.refId}-${sanitizeChannelPath(target.pattern ?? "")}`,
           data: { pattern: target.pattern ?? "" },
         },
       })
@@ -45,4 +47,9 @@ export class LiveDatasource extends DataSourceApi<LiveQuery, LiveDSOptions> {
     // The Go backend CheckHealth already verifies hub reachability.
     return { status: "success", message: "ok" };
   }
+}
+
+// Reduce a metric prefix to characters allowed in a Grafana Live channel path.
+function sanitizeChannelPath(pattern: string): string {
+  return pattern.replace(/[^A-z0-9_\-/=.]/g, "_");
 }
