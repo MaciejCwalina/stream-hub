@@ -1,4 +1,4 @@
-package main
+package samplers
 
 import (
 	"io"
@@ -39,7 +39,8 @@ func vllmSum(text string, name string) (float64, bool) {
 	return total, found
 }
 
-func (h *MetricHub) sampleVLLM(url string, interval time.Duration) {
+// VLLM polls the vLLM metrics endpoint and records derived metrics.
+func VLLM(recorder Recorder, url string, interval time.Duration) {
 	st := &vllmState{last: time.Now()}
 	client := &http.Client{Timeout: 500 * time.Millisecond}
 	for {
@@ -48,7 +49,6 @@ func (h *MetricHub) sampleVLLM(url string, interval time.Duration) {
 		if err != nil {
 			continue
 		}
-
 		text, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
@@ -73,30 +73,30 @@ func (h *MetricHub) sampleVLLM(url string, interval time.Duration) {
 		}
 
 		if gen > st.genTokens && !first {
-			h.record("vllm.tok_s", (gen-st.genTokens)/dt)
+			recorder("vllm.tok_s", (gen-st.genTokens)/dt)
 		}
 
 		st.genTokens = gen
 		if prompt > st.promptTokens && !first {
-			h.record("vllm.prompt_tok_s", (prompt-st.promptTokens)/dt)
+			recorder("vllm.prompt_tok_s", (prompt-st.promptTokens)/dt)
 		}
 
 		st.promptTokens = prompt
 		if drafts > st.drafts && drafts > 0 {
-			h.record("vllm.spec_accept", (acc-st.accepted)/(drafts-st.drafts))
+			recorder("vllm.spec_accept", (acc-st.accepted)/(drafts-st.drafts))
 			st.accepted, st.drafts = acc, drafts
 		}
 
 		if hasRunning {
-			h.record("vllm.running", running)
+			recorder("vllm.running", running)
 		}
 
 		if waiting > 0 {
-			h.record("vllm.waiting", waiting)
+			recorder("vllm.waiting", waiting)
 		}
 
 		if kv > 0 {
-			h.record("vllm.kv_usage", kv)
+			recorder("vllm.kv_usage", kv)
 		}
 	}
 }
