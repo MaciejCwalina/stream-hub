@@ -6,7 +6,7 @@ const options = {
   entryPoints: ["src/module.ts"],
   bundle: true,
   outfile: "dist/module.js",
-  format: "iife",
+  format: "esm",
   target: "es2022",
   sourcemap: true,
   logLevel: "info",

@@ -43,3 +43,4 @@ Style checks (blank-line-after-block rule + gofumpt): `./tools/lint.sh` from the
 - The Grafana plugins dir must be owned by the container user (uid 472 in the home server's compose setup).
 - Replace the plugin binary only while Grafana is stopped (text-file-busy).
 - The plugin's health check translates `ws://` → `http://` when calling the hub's `/healthz`.
+- The frontend bundle must be ESM (`format: "esm"` in build.mjs). An IIFE/CJS bundle makes the browser fail with "Could not load plugin" even though the backend works.
