@@ -30,7 +30,7 @@ func loadGPUNames() map[string]string {
 }
 
 // GPU samples nvidia-smi and records per-card metrics.
-func GPU(recorder func(metric string, value float64), interval time.Duration) {
+func GPU(recorder func(metric string, value float64), onResult func(ok bool), interval time.Duration) {
 	names := loadGPUNames()
 	for {
 		time.Sleep(interval)
@@ -38,8 +38,11 @@ func GPU(recorder func(metric string, value float64), interval time.Duration) {
 			"--query-gpu=uuid,name,temperature.gpu,clocks.current.memory,power.draw,utilization.gpu",
 			"--format=csv,noheader,nounits").Output()
 		if err != nil {
+			onResult(false)
 			continue
 		}
+
+		onResult(true)
 
 		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 		for index, line := range lines {

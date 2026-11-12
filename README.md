@@ -21,6 +21,7 @@ vram-oc-guard ───────(POST /push)───┘        │
 ```
 
 - Hub keeps recent history per metric; on WS connect it sends a snapshot, then ~100 ms-coalesced update batches.
+- Self-observability at `GET /metrics` (Prometheus text): sampler failure counts + last-success timestamps, subscriber/batch/drop counters, internal state sizes. Scrape it with a Prometheus job (`stream-hub`, `localhost:9797`).
 - WS message format: `{"type":"snapshot|update","data":[[metric, unix_ms, value],...]}`
 - Subscribers can filter by metric prefix: `/stream?metrics=vllm.,gpu0_asus_dual.`
 - Prometheus stays the system of record (history + alerts); this is the live glass.

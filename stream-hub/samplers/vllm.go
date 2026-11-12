@@ -44,21 +44,25 @@ func vllmSum(text string, name string) (float64, bool) {
 }
 
 // VLLM polls the vLLM metrics endpoint and records derived metrics.
-func VLLM(recorder func(metric string, value float64), url string, interval time.Duration) {
+func VLLM(recorder func(metric string, value float64), onResult func(ok bool), url string, interval time.Duration) {
 	st := &vllmState{last: time.Now()}
 	client := &http.Client{Timeout: 500 * time.Millisecond}
 	for {
 		time.Sleep(interval)
 		resp, err := client.Get(url)
 		if err != nil {
+			onResult(false)
 			continue
 		}
 
 		text, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
+			onResult(false)
 			continue
 		}
+
+		onResult(true)
 
 		running, hasRunning := vllmSum(string(text), "vllm:num_requests_running")
 		waiting, _ := vllmSum(string(text), "vllm:num_requests_waiting")
