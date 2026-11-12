@@ -36,9 +36,9 @@ import (
 const historyCap = 20000 // ~20 min at current rates; enough for a useful snapshot window
 
 type entry struct {
-	metric string
-	ts     time.Time
-	value  float64
+	metric    string
+	timestamp time.Time
+	value     float64
 }
 
 type subscriber struct {
@@ -46,39 +46,39 @@ type subscriber struct {
 	prefixes []string
 }
 
-type Hub struct {
-	mu      sync.Mutex
-	latest  map[string]float64
-	hist    []entry
-	pending []entry // entries not yet broadcast
+type MetricHub struct {
+	mu               sync.Mutex
+	lastValues       map[string]float64 // most recent value per metric
+	history          []entry            // rolling sample history (capped), used for connect snapshots
+	pendingBroadcast []entry            // samples waiting to be flushed to subscribers
 
 	subsMu sync.Mutex
 	subs   map[*subscriber]struct{}
 }
 
-func NewHub() *Hub {
-	return &Hub{
-		latest: map[string]float64{},
-		subs:   map[*subscriber]struct{}{},
+func NewMetricHub() *MetricHub {
+	return &MetricHub{
+		lastValues: map[string]float64{},
+		subs:       map[*subscriber]struct{}{},
 	}
 }
 
-func (h *Hub) record(metric string, value float64) {
+func (h *MetricHub) record(metric string, value float64) {
 	now := time.Now()
 	h.mu.Lock()
-	h.latest[metric] = value
-	h.hist = append(h.hist, entry{metric, now, value})
-	if len(h.hist) > historyCap {
-		h.hist = h.hist[len(h.hist)-historyCap:]
+	h.lastValues[metric] = value
+	h.history = append(h.history, entry{metric, now, value})
+	if len(h.history) > historyCap {
+		h.history = h.history[len(h.history)-historyCap:]
 	}
 
-	h.pending = append(h.pending, entry{metric, now, value})
+	h.pendingBroadcast = append(h.pendingBroadcast, entry{metric, now, value})
 	h.mu.Unlock()
 }
 
 // Broadcaster flushes pending entries to all subscribers every interval,
 // filtered per subscriber by their metric prefixes.
-func (h *Hub) Broadcaster(ctx context.Context, interval time.Duration) {
+func (h *MetricHub) Broadcaster(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -87,8 +87,8 @@ func (h *Hub) Broadcaster(ctx context.Context, interval time.Duration) {
 			return
 		case <-ticker.C:
 			h.mu.Lock()
-			batch := h.pending
-			h.pending = nil
+			batch := h.pendingBroadcast
+			h.pendingBroadcast = nil
 			h.mu.Unlock()
 			if len(batch) == 0 {
 				continue
@@ -121,7 +121,7 @@ func (h *Hub) Broadcaster(ctx context.Context, interval time.Duration) {
 	}
 }
 
-func (h *Hub) subscribe(prefixes []string) *subscriber {
+func (h *MetricHub) subscribe(prefixes []string) *subscriber {
 	sub := &subscriber{ch: make(chan []entry, 16), prefixes: prefixes}
 	h.subsMu.Lock()
 	h.subs[sub] = struct{}{}
@@ -129,18 +129,18 @@ func (h *Hub) subscribe(prefixes []string) *subscriber {
 	return sub
 }
 
-func (h *Hub) unsubscribe(sub *subscriber) {
+func (h *MetricHub) unsubscribe(sub *subscriber) {
 	h.subsMu.Lock()
 	delete(h.subs, sub)
 	close(sub.ch)
 	h.subsMu.Unlock()
 }
 
-func (h *Hub) snapshot(prefixes []string) []entry {
+func (h *MetricHub) snapshot(prefixes []string) []entry {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	var out []entry
-	for _, item := range h.hist {
+	for _, item := range h.history {
 		if matchesAny(item.metric, prefixes) {
 			out = append(out, item)
 		}
@@ -169,7 +169,7 @@ func matchesAny(metric string, prefixes []string) bool {
 func encodeBatch(typ string, data []entry) ([]byte, error) {
 	rows := make([][]any, 0, len(data))
 	for _, item := range data {
-		rows = append(rows, []any{item.metric, item.ts.UnixMilli(), item.value})
+		rows = append(rows, []any{item.metric, item.timestamp.UnixMilli(), item.value})
 	}
 
 	return json.Marshal(map[string]any{"type": typ, "data": rows})
@@ -177,7 +177,7 @@ func encodeBatch(typ string, data []entry) ([]byte, error) {
 
 var upgrader = websocket.Upgrader{}
 
-func (h *Hub) handleStream(w http.ResponseWriter, r *http.Request) {
+func (h *MetricHub) handleStream(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("ws accept: %v", err)
@@ -231,7 +231,7 @@ type pushMsg struct {
 	Value  float64 `json:"value"`
 }
 
-func (h *Hub) handlePush(w http.ResponseWriter, r *http.Request) {
+func (h *MetricHub) handlePush(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -290,7 +290,7 @@ func vllmSum(text, name string) (float64, bool) {
 	return total, found
 }
 
-func (h *Hub) sampleVLLM(url string, interval time.Duration) {
+func (h *MetricHub) sampleVLLM(url string, interval time.Duration) {
 	st := &vllmState{last: time.Now()}
 	client := &http.Client{Timeout: 500 * time.Millisecond}
 	for {
@@ -372,7 +372,7 @@ func loadGPUNames() map[string]string {
 	return names
 }
 
-func (h *Hub) sampleGPU(interval time.Duration) {
+func (h *MetricHub) sampleGPU(interval time.Duration) {
 	names := loadGPUNames()
 	for {
 		time.Sleep(interval)
@@ -429,16 +429,16 @@ func main() {
 	gpuInterval := flag.Duration("gpu-interval", 500*time.Millisecond, "nvidia-smi interval")
 	flag.Parse()
 
-	hub := NewHub()
+	metricHub := NewMetricHub()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go hub.Broadcaster(ctx, 100*time.Millisecond)
-	go hub.sampleVLLM(*vllmURL, *vllmInterval)
-	go hub.sampleGPU(*gpuInterval)
+	go metricHub.Broadcaster(ctx, 100*time.Millisecond)
+	go metricHub.sampleVLLM(*vllmURL, *vllmInterval)
+	go metricHub.sampleGPU(*gpuInterval)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/stream", hub.handleStream)
-	mux.HandleFunc("/push", hub.handlePush)
+	mux.HandleFunc("/stream", metricHub.handleStream)
+	mux.HandleFunc("/push", metricHub.handlePush)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "ok") })
 
 	log.Printf("stream-hub listening on %s (vllm=%s every %s, gpu every %s)", *listen, *vllmURL, *vllmInterval, *gpuInterval)
