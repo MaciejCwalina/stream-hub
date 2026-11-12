@@ -15,7 +15,7 @@ type vllmState struct {
 }
 
 // vllmSum sums all sample values for one metric name in Prometheus text exposition format.
-func vllmSum(text, name string) (float64, bool) {
+func vllmSum(text string, name string) (float64, bool) {
 	total, found := 0.0, false
 	for _, line := range strings.Split(text, "\n") {
 		rest := strings.TrimPrefix(line, name)
