@@ -9,8 +9,10 @@
   "executable": "gpx_home_llm_live",
   "info": {
     "description": "Pushed metrics from the home LLM server stream-hub (WebSocket, no polling)",
-    "author": { "name": "Maciej" },
-    "version": "1.0.0",
+    "author": {
+      "name": "Maciej"
+    },
+    "version": "1.0.1",
     "updated": "2026-11-12"
   }
 }
