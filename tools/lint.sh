@@ -15,7 +15,7 @@ GOFUMPT=${GOFUMPT:-$HOME/go/bin/gofumpt}
 (cd grafana-live-ds && "$WSL" --default none --enable after-block ./pkg/...)
 
 # gofumpt: stricter gofmt.
-"$GOFUMPT" -l stream-hub/main.go stream-hub/samplers/*.go stream-hub/testclient/main.go \
+"$GOFUMPT" -l stream-hub/main.go stream-hub/samplers/*.go \
   grafana-live-ds/pkg/main.go grafana-live-ds/pkg/plugin/*.go
 
 echo "style OK"
