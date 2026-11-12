@@ -1,0 +1,11 @@
+[Unit]
+Description=Real-time metric stream hub (vLLM + GPU samplers, WebSocket fan-out)
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/stream-hub
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
